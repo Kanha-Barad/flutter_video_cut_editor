@@ -19,5 +19,5 @@ Supports importing videos, splitting/deleting segments, skipping playback, and e
 
 ### 1. Clone repo
 ```bash
-git clone https://github.com/YOUR-USERNAME/flutter_video_cut_editor.git
+git clone https://github.com/Kanha-Barad/flutter_video_cut_editor.git
 cd flutter_video_cut_editor

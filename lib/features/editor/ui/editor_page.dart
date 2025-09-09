@@ -25,13 +25,15 @@ class _EditorPageState extends State<EditorPage> {
   int? _playSegIndex;
   bool _ready = false;
 
-  EditorNotifier get notifier => Provider.of<EditorNotifier>(context, listen: false);
+  EditorNotifier get notifier =>
+      Provider.of<EditorNotifier>(context, listen: false);
 
   @override
   void initState() {
     super.initState();
     _vp = VideoPlayerController.file(widget.file);
-    _ve = VideoEditorController.file(widget.file, minDuration: Duration.zero, maxDuration: const Duration(hours: 6));
+    _ve = VideoEditorController.file(widget.file,
+        minDuration: Duration.zero, maxDuration: const Duration(hours: 6));
     _init();
   }
 
@@ -92,10 +94,12 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<void> _startPlaySegmentsMode() async {
-    final idx = _findSegmentIndexFor(_playhead) ?? _findNextSegmentIndexAfter(_playhead);
+    final idx = _findSegmentIndexFor(_playhead) ??
+        _findNextSegmentIndexAfter(_playhead);
     if (idx == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No segment to play')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No segment to play')));
       return;
     }
     _playSegIndex = idx;
@@ -122,17 +126,27 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<String> _suggestOut(bool multi) async {
-    final dir = await getApplicationDocumentsDirectory();
+    Directory dir;
+    if (Platform.isAndroid) {
+      dir = Directory('/storage/emulated/0/Download');
+    } else {
+      dir = await getApplicationDocumentsDirectory();
+    }
+    if (!await dir.exists()) await dir.create(recursive: true);
     final name = p.basenameWithoutExtension(widget.file.path);
-    return p.join(dir.path, '${name}_${multi ? 'multi' : 'cut'}_${DateTime.now().millisecondsSinceEpoch}.mp4');
+    return p.join(dir.path,
+        '${name}_${multi ? 'multi' : 'cut'}_${DateTime.now().millisecondsSinceEpoch}.mp4');
   }
 
   Future<void> _onExport() async {
-    final out = await notifier.export(widget.file, suggestOut: (multi) => _suggestOut(multi));
+    final out = await notifier.export(widget.file,
+        suggestOut: (multi) => _suggestOut(multi));
     if (out != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved: $out')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Saved: $out')));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Export failed')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Export failed')));
     }
   }
 
@@ -141,19 +155,22 @@ class _EditorPageState extends State<EditorPage> {
     return Consumer<EditorNotifier>(builder: (context, n, _) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(p.basename(widget.file.path)),
+          title: Text(
+            p.basename(widget.file.path),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           actions: [
             IconButton(
               onPressed: !_ready
                   ? null
                   : () async {
-                if (_vp.value.isPlaying) {
-                  await _vp.pause();
-                  setState(() {});
-                } else {
-                  await _startPlaySegmentsMode();
-                }
-              },
+                      if (_vp.value.isPlaying) {
+                        await _vp.pause();
+                        setState(() {});
+                      } else {
+                        await _startPlaySegmentsMode();
+                      }
+                    },
               icon: Icon(_vp.value.isPlaying ? Icons.pause : Icons.play_arrow),
             )
           ],
@@ -161,64 +178,203 @@ class _EditorPageState extends State<EditorPage> {
         body: !_ready
             ? const Center(child: CircularProgressIndicator())
             : SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Center(child: AspectRatio(aspectRatio: _vp.value.aspectRatio, child: VideoPlayer(_vp))),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.of(context).padding.bottom + 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      EditorTimeline(
-                        veController: _ve,
-                        playhead: _playhead,
-                        segments: n.segments,
-                        selected: n.selectedIndex,
-                        onSeek: (t) => _seek(t),
-                        onSelect: (i) {
-                          n.selectIndex(i);
-                          setState(() {});
-                        },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Video player with overlay
+                    Expanded(
+                      child: Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              AspectRatio(
+                                aspectRatio: _vp.value.aspectRatio,
+                                child: VideoPlayer(_vp),
+                              ),
+                              if (!_vp.value.isPlaying)
+                                Container(
+                                  color: Colors.black26,
+                                  child: const Icon(Icons.play_circle_fill,
+                                      size: 64, color: Colors.white70),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Wrap(spacing: 8, runSpacing: 8, children: [
-                        FilledButton.icon(onPressed: () {
-                          notifier.splitAt(_playhead);
-                          setState(() {});
-                        }, icon: const Icon(Icons.content_cut), label: const Text('Split ✂️')),
-                        OutlinedButton.icon(onPressed: () {
-                          notifier.deleteSelected();
-                          // ensure playhead inside selected
-                          final seg = notifier.segments[notifier.selectedIndex];
-                          if (_playhead < seg.start || _playhead > seg.end) _seek(seg.start);
-                          setState(() {});
-                        }, icon: const Icon(Icons.delete_forever), label: const Text('Delete')),
-                        FilledButton.icon(
-                            onPressed: notifier.exporting ? null : _onExport,
-                            icon: const Icon(Icons.save_alt),
-                            label: Text(notifier.segments.length == 1 ? 'Export' : 'Export (concat)')),
-                      ]),
-                      const SizedBox(height: 8),
-                      if (notifier.exporting) ...[
-                        LinearProgressIndicator(value: notifier.progress == 0 ? null : notifier.progress),
-                        const SizedBox(height: 6),
-                        Text('${(notifier.progress * 100).clamp(0, 100).toStringAsFixed(0)}%'),
-                      ],
-                      if (notifier.lastOut != null) ...[
-                        const SizedBox(height: 6),
-                        Text('Saved: ${notifier.lastOut}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      ]
-                    ],
-                  ),
+                    ),
+
+                    // Bottom controls
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(12, 12, 12,
+                            MediaQuery.of(context).padding.bottom + 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Timeline card
+                            Card(
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              elevation: 3,
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: EditorTimeline(
+                                  veController: _ve,
+                                  playhead: _playhead,
+                                  segments: n.segments,
+                                  selected: n.selectedIndex,
+                                  onSeek: (t) => _seek(t),
+                                  onSelect: (i) {
+                                    n.selectIndex(i);
+                                    setState(() {});
+                                  },
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Action buttons
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.indigo,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  onPressed: () {
+                                    notifier.splitAt(_playhead);
+                                    setState(() {});
+                                  },
+                                  icon: const Icon(Icons.content_cut,
+                                      color: Colors.white),
+                                  label: const Text(
+                                    'Split',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                        color: Colors.red, width: 2),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  onPressed: () {
+                                    notifier.deleteSelected();
+                                    final seg = notifier
+                                        .segments[notifier.selectedIndex];
+                                    if (_playhead < seg.start ||
+                                        _playhead > seg.end) _seek(seg.start);
+                                    setState(() {});
+                                  },
+                                  icon: const Icon(Icons.delete_forever,
+                                      color: Colors.red),
+                                  label: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Export button
+                            Center(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 14),
+                                ),
+                                onPressed:
+                                    notifier.exporting ? null : _onExport,
+                                icon: const Icon(Icons.save_alt,
+                                    color: Colors.white),
+                                label: Text(
+                                  notifier.segments.length == 1
+                                      ? 'Export Video'
+                                      : 'Export & Merge',
+                                  style: const TextStyle(
+                                      fontSize: 16, color: Colors.white),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Export progress card
+                            if (notifier.exporting) ...[
+                              Card(
+                                margin: const EdgeInsets.only(top: 12),
+                                elevation: 2,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text("Exporting...",
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 8),
+                                      LinearProgressIndicator(
+                                          value: notifier.progress == 0
+                                              ? null
+                                              : notifier.progress),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                          '${(notifier.progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                                          style: const TextStyle(fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+
+                            // Last export preview
+                            if (notifier.lastOut != null) ...[
+                              Card(
+                                margin: const EdgeInsets.only(top: 12),
+                                child: ListTile(
+                                  leading: const Icon(Icons.video_library,
+                                      color: Colors.teal),
+                                  title: const Text("Exported Video"),
+                                  subtitle: Text(
+                                    notifier.lastOut!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.open_in_new),
+                                    onPressed: () async {
+                                      final file = File(notifier.lastOut!);
+                                      if (await file.exists()) {
+                                        // TODO: open in external player
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
       );
     });
   }
