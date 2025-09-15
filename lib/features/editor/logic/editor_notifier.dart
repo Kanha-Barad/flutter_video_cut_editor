@@ -14,7 +14,7 @@ class EditorNotifier extends ChangeNotifier {
   double progress = 0.0;
   String? lastOut;
 
-  EditorNotifier({FFmpegService? ffmpegService}) : ffmpeg = ffmpegService ?? FFmpegService();
+  EditorNotifier(FFmpegService fFmpegService, {FFmpegService? ffmpegService}) : ffmpeg = ffmpegService ?? FFmpegService();
 
   void setInitial(Duration total) {
     segments = [Segment(Duration.zero, total)];

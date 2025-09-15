@@ -40,5 +40,10 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # Allow headers to be found
+    target.build_configurations.each do |config|
+      config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) ${PODS_ROOT}/ffmpeg_kit_flutter_new_min_gpl/ios/Classes'
+    end
   end
 end
+
